@@ -12,7 +12,7 @@ setwd("/Users/Thea2/Desktop/proj25") # add personal directory
 
 #indexfm <- as.data.frame(json_result)
 
-
+data = read.csv("index_items_prepared_comma.csv", header=TRUE)
 
 summary(indexfm)
 
