@@ -3,6 +3,7 @@ if (!require("jsonlite")) install.packages("jsonlite")
 library(jsonlite)
 library(ggplot2)
 library(tidyr)
+library(forcats)
 
 setwd("/Users/Thea2/Desktop/proj25") # add personal directory
 
@@ -12,9 +13,7 @@ setwd("/Users/Thea2/Desktop/proj25") # add personal directory
 
 #indexfm <- as.data.frame(json_result)
 
-data = read.csv("index_items_prepared_comma.csv", header=TRUE)
-
-summary(indexfm)
+indexfm = read.csv("index_items_prepared_comma.csv", header=TRUE)
 
 zip_to_section_simple = c(
   
@@ -60,28 +59,115 @@ zip_to_section_simple = c(
 indexfm = indexfm %>%
   mutate(section_simple = factor(zip_to_section_simple[as.character(section)]))
 
+indexfm$section = as.factor(indexfm$section)
+#indexfm$section_simple = as.factor(indexfm$section_simple)
+indexfm$reference_type = as.factor(indexfm$reference_type)
+
+summary(indexfm)
+
 # Preserve the order of sections as they appear in the dataset
-section_order <- unique(indexfm$section)
+section_order <- unique(indexfm$section_simple)
 
 # Example list of titles to filter
-selected_titles <- c("Military", "Military service", "Military deployment", "Military personnel", "United States Army", "Military Logistics", "Military Technology", "Military Recruitment", "Military capability", "United States Armed Forces", "Military doctrine", "Military Health System", "Military campaign", "Military education and training", "Military budget", "Soldier", "Military academy", "Military strategy", "Military acquistion")
+selected_titles_military <- c("Military", "Military service", "Military deployment", 
+                     "Military personnel", "United States Army", "Military logistics", 
+                     "Military technology", "Military recruitment", "Military capability", 
+                     "United States Armed Forces", "Military doctrine", "Military Health System", 
+                     "Military campaign", "Military education and training", "Military budget", 
+                     "Soldier", "Military academy", "Military strategy", "Military acquisition")
+
+selected_titles_gender <- c("Gender", "Transgender", "Gender identity", "Gender transition",
+                                "Sex–gender distinction", "Non-binary gender", "Gender sensitivity",
+                                "Gender-based activities", "Gender ideology", "Gender equality",
+                                "Sexual characteristics", "Gender studies", "Gender dysphoria",
+                                "Sexual dimorphism", "Sex", "Gender mainstreaming",
+                                "Sexual Orientation and Gender Identity", "Gender-affirming surgery",
+                              "Sexism")
+
+selected_titles_racism <- c("Institutional racism", "Discrimination", "Race (human categorization)",
+                            "Racial Equity", "Racial quota", "Race and education",
+                            "Racial color blindness", "Affirmative discrimination",
+                            "Race and gender activism", "Race-conscious policy",
+                            "White privilege", "Intersectionality", "Religious discrimination",
+                            "Critical race theory", "Anti-discrimination law", "Racial inequality in the United States",
+                            "Ethnicity", "Genocide")
+
+selected_titles_tax <- c("Tax", "Tax revenue", "Taxpayer",
+                         "Sales tax", "Tax policy", "Tax rate",
+                         "Tax deduction", "Taxation in the United States",
+                         "Tax and spend", "Corporate tax", "Transfer tax", "Income tax in the United States")
+
+selected_titles_single <- c("TikTok")
+
 # Filter data for selected titles
 filtered_data <- indexfm %>%
-  filter(title %in% selected_titles)  # Only keep rows with selected titles
+  filter(title %in% selected_titles_tax)  # Only keep rows with selected titles
+
+# Summarize data to count occurrences of each title in each section
+heatmap_data <- filtered_data %>%
+  group_by(title, section_simple) %>%
+  summarise(Frequency = n(), .groups = 'drop')  # Count occurrences
+
+# Create the heat map
+ggplot(heatmap_data, aes(x = section_simple, y = title, fill = Frequency)) +
+  geom_tile(color = "white") +  # Add white borders for better separation
+  scale_fill_gradient(low = "lightblue", high = "darkblue", name = "Frequency") +  # Color gradient
+  labs(
+    title = "Heat Map of Titles by Section",
+    x = "Section",
+    y = "Title"
+  ) +
+  theme_minimal() +
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1)  # Rotate x-axis labels
+  )
 
 # Summarize counts by title and section
 summary_data <- filtered_data %>%
-  group_by(title, section) %>%
-  summarize(count = n(), .groups = 'drop') %>%
-  complete(title = selected_titles, section = section_order, fill = list(count = 0)) %>%
-  mutate(section = factor(section, levels = section_order)) 
+  group_by(title, section_simple) %>%
+  summarize(count = n(), .groups = 'drop')
 
-ggplot(summary_data, aes(x = section, y = title, fill = count)) +
-  geom_tile(color = "white") +
-  scale_fill_gradient(low = "lightblue", high = "darkblue") +
-  labs(title = "Occurrences of Selected Titles by Section",
+# Create the heat map
+ggplot(heatmap_data, aes(x = section_simple, y = title, fill = Frequency)) +
+  geom_tile(color = "white") +  # Add white borders for better separation
+  scale_fill_gradient(low = "lightblue", high = "darkblue", name = "Frequency") +  # Color gradient
+  scale_x_discrete(expand = c(0, 0)) +  # Remove padding on x-axis
+  scale_y_discrete(expand = c(0, 0)) +  # Remove padding on y-axis
+  labs(
+    title = "Heat Map of Titles by Section",
+    x = "Section",
+    y = "Title"
+  ) +
+  theme_minimal() +
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1),  # Rotate x-axis labels
+  )
+
+
+section_counts <- indexfm %>%
+  group_by(section) %>%
+  summarise(Count = n())
+
+ggplot(section_counts, aes(x = reorder(section, -Count), y = Count)) +
+  geom_bar(stat = "identity", fill = "darkorange") +
+  labs(title = "Number of Documents per Section",
        x = "Section",
-       y = "Title",
-       fill = "Count") +
+       y = "Document Count") +
   theme_minimal() +
   theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+# titles by references, subcategory reference type
+filtered_data <- filtered_data %>%
+  mutate(title = fct_reorder(title, reference_type, .fun = length, .desc = FALSE))
+
+ggplot(filtered_data, aes(x = title, fill = reference_type)) +
+  geom_bar() +
+  coord_flip() +
+  labs(
+    title = "Distribution of Selected Titles by Section",
+    x = "Categories",
+    y = "Number of Titles",
+    fill = "Section"
+  ) +
+  theme_minimal()
+
