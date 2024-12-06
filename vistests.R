@@ -171,3 +171,6 @@ ggplot(filtered_data, aes(x = title, fill = reference_type)) +
   ) +
   theme_minimal()
 
+which.max(nchar(indexfm$title))
+indexfm[3664,]
+
