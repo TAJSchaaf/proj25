@@ -163,17 +163,39 @@ server <- function(input, output, session) {
     
   })
   
+  
+  # General Visualizations - Stacked Bar Chart
   output$bar_chart <- renderPlot({
     titles <- selected_titles()  # Get the confirmed titles
     
-    # If no titles are selected, return a message or an empty plot
+    # If no titles are selected, return an empty plot or message
     if (is.null(titles) || length(titles) == 0) {
       plot(1, type = "n", xlab = "", ylab = "", main = "Please select titles and click Confirm")
       return()
     }
     
-    # Example bar chart: Simulate different titles data (replace with actual logic)
-    barplot(c(4, 7, 9), names.arg = titles, main = paste("Bar Chart for", paste(titles, collapse = ", ")))
+    # Filter the data to include only the selected titles
+    filtered_data <- indexfm %>%
+      filter(title %in% titles) %>%
+      count(title, reference_type)  # Count occurrences of each title by reference_type
+    
+    # Limit title length to 15 characters for display
+    filtered_data$title <- substr(filtered_data$title, 1, 15)
+    
+    # Sort by frequency (count of occurrences)
+    filtered_data <- filtered_data %>%
+      arrange(desc(n))
+    
+    # Create the stacked bar chart
+    ggplot(filtered_data, aes(x = reorder(title, -n), y = n, fill = reference_type)) +
+      geom_bar(stat = "identity", position = "stack") +  # Create a stacked bar chart
+      labs(title = "Stacked Bar Chart of Title Frequency by Reference Type", x = "Title", y = "Frequency", fill = "Reference Type") +
+      coord_flip() +
+      theme_minimal() +
+      theme(
+        axis.text.x = element_text(angle = 45, hjust = 1),  # Rotate title names for better readability
+        plot.margin = margin(0, 0, 0, 0)  # Remove any extra margin around the plot
+      )
   })
   
   # API Definitions
