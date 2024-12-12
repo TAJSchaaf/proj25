@@ -1,4 +1,5 @@
 if (!require("shiny")) install.packages("shiny")
+if (!require("shinydashboard")) install.packages("shinydashboard")
 if (!require("shinythemes")) install.packages("shinythemes")
 if (!require("pacman")) install.packages("pacman")
 pacman::p_load("tidyverse", "dplyr", "shiny", "shinythemes", "patchwork", "ggplot2", "scales")
@@ -52,44 +53,121 @@ zip_to_section_simple = c(
 indexfm = indexfm %>%
   mutate(section_simple = factor(zip_to_section_simple[as.character(section)]))
 
+indexfm$section = as.factor(indexfm$section)
+indexfm$section_simple = as.factor(indexfm$section_simple)
+indexfm$reference_type = as.factor(indexfm$reference_type)
 
-# Define UI for application that draws a histogram
-ui <- fluidPage(
-
-    # Application title
-    titlePanel("Old Faithful Geyser Data"),
-
-    # Sidebar with a slider input for number of bins 
-    sidebarLayout(
-        sidebarPanel(
-            sliderInput("bins",
-                        "Number of bins:",
-                        min = 1,
-                        max = 50,
-                        value = 30)
-        ),
-
-        # Show a plot of the generated distribution
-        mainPanel(
-           plotOutput("distPlot")
-        )
-    )
+# Example themes list (replace with your actual data)
+themes <- list(
+  "Tax" = c("Tax", "Tax revenue", "Taxpayer",
+              "Sales tax", "Tax policy", "Tax rate",
+              "Tax deduction", "Taxation in the United States",
+              "Tax and spend", "Corporate tax", "Transfer tax", "Income tax in the United States"),
+  
+  "LGBT" = c("Gender", "Transgender", "Gender identity", "Gender transition",
+             "Sex–gender distinction", "Non-binary gender", "Gender sensitivity",
+             "Gender-based activities", "Gender ideology", "Gender equality",
+             "Sexual characteristics", "Gender studies", "Gender dysphoria",
+             "Sexual dimorphism", "Sex", "Gender mainstreaming",
+             "Sexual Orientation and Gender Identity", "Gender-affirming surgery",
+             "Sexism"),
+  
+  "Environment" = c("Climate Change", "Sustainability")
 )
 
-# Define server logic required to draw a histogram
-server <- function(input, output) {
+# Filtered instance categories
+valid_instances <- c("human", "academic discipline")
+instance_filtered <- indexfm %>%
+  filter(instance_of %in% valid_instances) %>%
+  distinct(instance_of, title)
 
-    output$distPlot <- renderPlot({
-        # generate bins based on input$bins from ui.R
-        x    <- faithful[, 2]
-        bins <- seq(min(x), max(x), length.out = input$bins + 1)
+ui <- fluidPage(
+  titlePanel("Project 2025 Index"),
+  sidebarLayout(
+    sidebarPanel(
+      selectInput(
+        inputId = "search_mode",
+        label = "Choose Search Mode",
+        choices = c("Themes", "Instances", "All"),
+        selected = "Themes"
+      ),
+      uiOutput("dynamic_selector"),
+      checkboxGroupInput(
+        inputId = "title_select",
+        label = "Select Titles",
+        choices = NULL # Dynamically populated
+      )
+    ),
+    mainPanel(
+      h3("Selected Titles"),
+      verbatimTextOutput("selected_titles") # For debugging and display
+    )
+  )
+)
 
-        # draw the histogram with the specified number of bins
-        hist(x, breaks = bins, col = 'darkgray', border = 'white',
-             xlab = 'Waiting time to next eruption (in mins)',
-             main = 'Histogram of waiting times')
-    })
+
+server <- function(input, output, session) {
+  # Dynamically render the selector based on search_mode
+  output$dynamic_selector <- renderUI({
+    if (input$search_mode == "Themes") {
+      selectInput(
+        inputId = "theme_select",
+        label = "Select Theme",
+        choices = names(themes),
+        selected = NULL
+      )
+    } else if (input$search_mode == "Instances") {
+      selectInput(
+        inputId = "instance_select",
+        label = "Select Instance Category",
+        choices = valid_instances,
+        selected = NULL
+      )
+    } else if (input$search_mode == "All") {
+      selectizeInput(
+        inputId = "title_select",
+        label = "Search Titles",
+        choices = unique(indexfm$title),
+        multiple = TRUE
+      )
+    }
+  })
+  
+  # Update titles for Themes
+  observeEvent(input$theme_select, {
+    if (!is.null(input$theme_select)) {
+      selected_theme_titles <- themes[[input$theme_select]]
+      updateCheckboxGroupInput(
+        session,
+        inputId = "title_select",
+        label = "Select Titles in Theme",
+        choices = selected_theme_titles,
+        selected = selected_theme_titles # Preselect all for themes
+      )
+    }
+  })
+  
+  # Update titles for Instances
+  observeEvent(input$instance_select, {
+    if (!is.null(input$instance_select)) {
+      filtered_titles <- instance_filtered %>%
+        filter(instance_of == input$instance_select) %>%
+        pull(title)
+      updateCheckboxGroupInput(
+        session,
+        inputId = "title_select",
+        label = "Select Titles in Instance",
+        choices = filtered_titles,
+        selected = filtered_titles # Preselect all for instances
+      )
+    }
+  })
+  
+  # Debugging/Output for Selected Titles
+  output$selected_titles <- renderPrint({
+    input$title_select
+  })
 }
 
-# Run the application 
-shinyApp(ui = ui, server = server)
+
+shinyApp(ui, server)

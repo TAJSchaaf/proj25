@@ -1,6 +1,4 @@
-if (!require("jsonlite")) install.packages("jsonlite")
 
-library(jsonlite)
 library(ggplot2)
 library(tidyr)
 library(forcats)
@@ -65,9 +63,6 @@ indexfm$reference_type = as.factor(indexfm$reference_type)
 
 summary(indexfm)
 
-# Preserve the order of sections as they appear in the dataset
-section_order <- unique(indexfm$section_simple)
-
 # Example list of titles to filter
 selected_titles_military <- c("Military", "Military service", "Military deployment", 
                      "Military personnel", "United States Army", "Military logistics", 
@@ -97,31 +92,33 @@ selected_titles_tax <- c("Tax", "Tax revenue", "Taxpayer",
                          "Tax deduction", "Taxation in the United States",
                          "Tax and spend", "Corporate tax", "Transfer tax", "Income tax in the United States")
 
-selected_titles_single <- c("TikTok")
+selected_titles_single <- c("Joe Biden", "Donald Trump", "Presidency of Joe Biden", "Presidency of Donald Trump")
 
-# Filter data for selected titles
-filtered_data <- indexfm %>%
-  filter(title %in% selected_titles_tax)  # Only keep rows with selected titles
+count_data <- indexfm %>%
+  group_by(Title, Section) %>%
+  summarise(Count = n(), .groups = 'drop')
 
-# Summarize data to count occurrences of each title in each section
-heatmap_data <- filtered_data %>%
-  group_by(title, section_simple) %>%
-  summarise(Frequency = n(), .groups = 'drop')  # Count occurrences
+# Step 2: Reshape the data for heatmap compatibility
+heatmap_data <- count_data %>%
+  tidyr::pivot_wider(names_from = Section, values_from = Count, values_fill = 0)
 
-# Create the heat map
-ggplot(heatmap_data, aes(x = section_simple, y = title, fill = Frequency)) +
-  geom_tile(color = "white") +  # Add white borders for better separation
-  scale_fill_gradient(low = "lightblue", high = "darkblue", name = "Frequency") +  # Color gradient
+# Step 3: Melt the data for ggplot (if needed)
+heatmap_melted <- count_data
+
+# Step 4: Create the heatmap
+ggplot(heatmap_melted, aes(x = Section, y = Title, fill = Count)) +
+  geom_tile(color = "white") +
+  scale_fill_gradient(low = "white", high = "blue") +
   labs(
-    title = "Heat Map of Titles by Section",
+    title = "Heatmap of Title Occurrences by Section",
     x = "Section",
-    y = "Title"
+    y = "Title",
+    fill = "Occurrences"
   ) +
   theme_minimal() +
   theme(
-    axis.text.x = element_text(angle = 45, hjust = 1)  # Rotate x-axis labels
+    axis.text.x = element_text(angle = 45, hjust = 1)
   )
-
 # Summarize counts by title and section
 summary_data <- filtered_data %>%
   group_by(title, section_simple) %>%
@@ -174,3 +171,17 @@ ggplot(filtered_data, aes(x = title, fill = reference_type)) +
 which.max(nchar(indexfm$title))
 indexfm[3664,]
 
+summary_data <- filtered_data %>%
+  group_by(title) %>%
+  summarize(count = n(), .groups = 'drop') %>%
+  complete(title = selected_titles, section_simple = unique(indexfm$section_simple), fill = list(count = 0))
+
+ggplot(summary_data, aes(x = section, y = title, fill = count)) +
+  geom_tile(color = "white") +
+  scale_fill_gradient(low = "lightblue", high = "darkblue") +
+  labs(title = "Occurrences of Selected Titles by Section",
+       x = "Section",
+       y = "Title",
+       fill = "Count") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
