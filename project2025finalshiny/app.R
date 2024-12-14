@@ -146,7 +146,11 @@ server <- function(input, output, session) {
       mutate(n = ifelse(is.na(n), 0, n))  # Replace NA with 0
     
     # Limit title length to 10 characters for display
-    complete_data$title <- substr(complete_data$title, 1, 15)
+    #complete_data$title <- substr(complete_data$title, 1, 15)
+    
+    # Sort by frequency (most frequent titles first)
+    filtered_data <- filtered_data %>%
+      arrange(desc(n))
     
     # Create a heatmap using ggplot2
     ggplot(complete_data, aes(x = section, y = title, fill = n)) +
@@ -180,7 +184,7 @@ server <- function(input, output, session) {
       count(title, reference_type)  # Count occurrences of each title by reference_type
     
     # Limit title length to 15 characters for display
-    filtered_data$title <- substr(filtered_data$title, 1, 15)
+    #filtered_data$title <- substr(filtered_data$title, 1, 15)
     
     # Sort by frequency (count of occurrences)
     filtered_data <- filtered_data %>%
@@ -192,6 +196,7 @@ server <- function(input, output, session) {
       labs(title = "Stacked Bar Chart of Title Frequency by Reference Type", x = "Title", y = "Frequency", fill = "Reference Type") +
       coord_flip() +
       theme_minimal() +
+      scale_fill_manual(values = c("Statement" = "blue", "Critique" = "red", "Recommendation" = "green", "Other" = "gray")) +
       theme(
         axis.text.x = element_text(angle = 45, hjust = 1),  # Rotate title names for better readability
         plot.margin = margin(0, 0, 0, 0)  # Remove any extra margin around the plot
