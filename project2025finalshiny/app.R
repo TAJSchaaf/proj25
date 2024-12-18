@@ -111,7 +111,11 @@ server <- function(input, output, session) {
       geom_tile(color = "black") +
       scale_fill_gradient(low = "white", high = "red") +
       labs(title = "Heatmap of Title Occurrences by Section", x = "Section", y = "Title", fill = "Count") +
-      theme_minimal()
+      theme_minimal() +
+      theme(
+        axis.text.x = element_text(angle = 45, hjust = 1),  # Rotate section names for better readability
+        plot.margin = margin(0, 0, 0, 0)  # Remove any extra margin around the plot
+      )
   })
   
   # Stacked Bar Chart Visualization
@@ -136,60 +140,59 @@ server <- function(input, output, session) {
       theme_minimal()
   })
   
-  # Editions Tab - Accordion
   output$accordion <- renderUI({
     titles <- selected_titles()
     
-    # If no titles are selected, display a message
     if (is.null(titles) || length(titles) == 0) {
       return(h4("Please select topics and click Confirm to view their references."))
     }
     
-    # Filter the data to include only the selected titles
     filtered_data <- indexfm %>%
       filter(title %in% titles) %>%
-      arrange(page)  # Sort by page number
+      arrange(page)
     
-    # Group by section and filter to include only sections with selected topics
     sections <- filtered_data %>%
       group_by(section) %>%
-      filter(n() > 0)  # Only keep sections with at least one reference
+      summarise(n_references = n(), .groups = "drop")
     
-    print(sections)
-    
-    # If no sections are available after filtering, show a message
     if (nrow(sections) == 0) {
       return(h4("No sections found for the selected topics."))
     }
     
-    # Create the accordion
+    # Generate accordion
     bs4Dash::accordion(
       id = "edition_accordion",
-      lapply(unique(sections$section), function(section_name) {
-        # Get references for this section
-        references <- sections %>% filter(section == section_name)
+      lapply(1:nrow(sections), function(i) {
+        section_name <- sections$section[i]
+        section_id <- paste0("section_", i)  # Unique ID for collapsible section
+        print(section_id)
+        references <- filtered_data %>%
+          filter(section == section_name) %>%
+          arrange(page)
         
-        # Prepare the content for this section
-        references_html <- lapply(1:nrow(references), function(i) {
-          ref <- references[i, ]
-          sprintf(
-            "<b>Title:</b> %s<br><b>Page:</b> %d<br><b>Summary:</b> %s<br>",
-            ref$title, ref$page, ref$summary
-          )
-        }) %>%
-          unlist() %>%
-          paste(collapse = "<hr>")  # Separate references with a line
+        references_html <- references %>%
+          mutate(
+            ref_html = sprintf(
+              "<b>Title:</b> %s<br><b>Page:</b> %d<br><b>Summary:</b> %s<br>",
+              title, page, summary
+            )
+          ) %>%
+          pull(ref_html) %>%
+          paste(collapse = "<hr>")
         
-        # Create the accordion item for this section
+        # Create accordion item
         bs4Dash::accordionItem(
+          id = section_id,
           title = paste(section_name, "(", nrow(references), "references)"),
-          status = "primary",  # Customize the color of the header
-          #collapsed = TRUE,  # Start collapsed
-          shiny::HTML(references_html)  # Insert the references as HTML
+          status = "primary",
+          shiny::HTML(references_html),
+          expanded = FALSE  # Ensure it starts collapsed
         )
       })
     )
   })
+  
+  
   
   # API Definitions Placeholder
   output$api_info <- renderText({
