@@ -8,8 +8,12 @@ pacman::p_load(
 setwd("/Users/Thea/Desktop/proj25") # Replace with your directory
 indexfm <- read.csv("index_items_prepared_comma.csv", header = TRUE)
 
+# section and reference_type as factors
 indexfm$section <- as.factor(indexfm$section)
 indexfm$reference_type <- as.factor(indexfm$reference_type)
+
+# sort data by title
+indexfm <- indexfm[order(indexfm$title),] 
 
 ui <- bs4DashPage(
   title = "Project 2025 Index",
@@ -50,8 +54,8 @@ ui <- bs4DashPage(
       # About tab
       bs4TabItem(
         tabName = "about",
-        h3("Selected Titles"),
-        verbatimTextOutput("selected_titles")
+        h2("API Definitions"),
+        textOutput("api_info")
       ),
       # General Visualizations Tab
       bs4TabItem(
@@ -70,7 +74,7 @@ ui <- bs4DashPage(
       bs4TabItem(
         tabName = "api",
         h2("API Definitions"),
-        textOutput("api_info")
+        textOutput("about_info")
       )
     )
   )
@@ -140,6 +144,12 @@ server <- function(input, output, session) {
         title = "Stacked Bar Chart of Title Frequency by Reference Type",
         x = "Title", y = "Frequency", fill = "Reference Type"
       ) +
+      scale_fill_manual(values = c(
+        "Statement" = "#708d81", 
+        "Critique" = "#bc4b51", 
+        "Recommendation" = "#f4d58d", 
+        "Other" = "#e0e1dd"
+      )) +
       coord_flip() +
       theme_minimal()
   })
@@ -226,6 +236,10 @@ server <- function(input, output, session) {
     "This section will provide definitions and details for the API."
   })
   
+  # About Placeholder
+  output$about_info <- renderText({
+    "This section will provide definitions and details for the API."
+  })
 }
 
 shinyApp(ui, server)
