@@ -173,6 +173,14 @@ server <- function(input, output, session) {
       return(h4("No sections found for the selected topics."))
     }
     
+    # Define a mapping of reference_type to colors
+    reference_colors <- c(
+      "Statement" = "#bc4b51", 
+      "Critique" = "#708d81",   
+      "Recommendation" = "#f4d58d",  
+      "Other" = "#e0e1dd"       
+    )
+    
     # Create accordion wrapper
     do.call(tags$div, c(
       list(
@@ -187,15 +195,23 @@ server <- function(input, output, session) {
           filter(section == section_name) %>%
           arrange(page)
         
-        references_html <- references %>%
-          mutate(
-            ref_html = sprintf(
-              "<b>Title:</b> %s<br><b>Page:</b> %d<br><b>Summary:</b> %s<br>",
-              title, page, summary
-            )
-          ) %>%
-          pull(ref_html) %>%
-          paste(collapse = "<hr>")
+        references_html <- lapply(1:nrow(references), function(j) {
+          ref <- references[j, ]
+          ref_color <- reference_colors[ref$reference_type]  # Get the color for the reference type
+          
+          # Add a colored background for each reference
+          sprintf(
+            "<div style='background-color: %s; padding: 10px; margin-bottom: 5px; border-radius: 5px;'>
+             <b>Title:</b> %s<br>
+             <b>Page:</b> %d<br>
+             <b>Summary:</b> %s
+           </div>",
+            ref_color, ref$title, ref$page, ref$summary
+          )
+        }) %>%
+          unlist() %>%
+          paste(collapse = "")  # Combine all references into one string
+        
         
         # Create card structure manually
         tags$div(
