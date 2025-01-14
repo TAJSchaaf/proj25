@@ -5,7 +5,7 @@ pacman::p_load(
   "ggplot2", "scales"
 )
 
-setwd("/Users/Thea2/Desktop/proj25") # Replace with your directory
+setwd("/Users/Thea/Desktop/proj25") # Replace with your directory
 indexfm <- read.csv("index_items_prepared_comma.csv", header = TRUE)
 
 indexfm$section <- as.factor(indexfm$section)
@@ -20,13 +20,13 @@ ui <- bs4DashPage(
     collapsed = TRUE,
     bs4SidebarMenu(
       bs4SidebarMenuItem(
+        "About", tabName = "about", icon = icon("info-circle")
+      ),
+      bs4SidebarMenuItem(
         "General Visualizations", tabName = "general", icon = icon("chart-bar")
       ),
       bs4SidebarMenuItem(
         "Result Edition", tabName = "edition", icon = icon("book")
-      ),
-      bs4SidebarMenuItem(
-        "Sentiment Data", tabName = "sentiment", icon = icon("smile")
       ),
       bs4SidebarMenuItem(
         "API Definitions", tabName = "api", icon = icon("info-circle")
@@ -47,6 +47,12 @@ ui <- bs4DashPage(
       tags$script(src = "https://cdn.jsdelivr.net/npm/bootstrap@4.5.3/dist/js/bootstrap.bundle.min.js")
     ),
     bs4TabItems(
+      # About tab
+      bs4TabItem(
+        tabName = "about",
+        h3("Selected Titles"),
+        verbatimTextOutput("selected_titles")
+      ),
       # General Visualizations Tab
       bs4TabItem(
         tabName = "general",
@@ -59,12 +65,6 @@ ui <- bs4DashPage(
         tabName = "edition",
         h2("Edition"),
         uiOutput("accordion")
-      ),
-      # Sentiment Data Tab
-      bs4TabItem(
-        tabName = "sentiment",
-        h3("Selected Titles"),
-        verbatimTextOutput("selected_titles")
       ),
       # API Definitions Tab
       bs4TabItem(

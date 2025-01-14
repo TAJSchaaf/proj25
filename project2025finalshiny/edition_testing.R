@@ -1,3 +1,10 @@
+library(shiny)
+library(bs4Dash)
+library(dplyr)
+#library(DT)
+library(text2vec)
+library(tidytext)
+
 if (!require("pacman")) install.packages("pacman")
 
 pacman::p_load(
@@ -5,201 +12,191 @@ pacman::p_load(
   "ggplot2", "scales"
 )
 
-setwd("/Users/Thea2/Desktop/proj25") # Replace with your directory
-indexfm <- read.csv("index_items_prepared_comma.csv", header = TRUE)
+# Load data (replace with your actual data loading method)
+load_project_data <- function() {
+  # Placeholder for data loading
+  # Assuming a CSV with columns: title, section, page, summary, wikipedia_id, instance_of
+  setwd("/Users/Thea2/Desktop/proj25") # Replace with your directory
+  indexfm <- read.csv("index_items_prepared_comma.csv", header = TRUE)
+  
+  # Preprocess data
+  data <- data %>%
+    mutate(
+      is_unique = n() == 1,  # Identify hapax legomena
+      summary_tokens = map(summary, ~ str_split(., "\\s+")[[1]])
+    )
+  
+  return(data)
+}
 
-indexfm$section <- as.factor(indexfm$section)
-indexfm$reference_type <- as.factor(indexfm$reference_type)
+# Compute similarity matrix (example implementation)
+compute_similarity_matrix <- function(data) {
+  # Create document-term matrix
+  vectorizer <- data$summary %>%
+    itoken() %>%
+    create_vocabulary() %>%
+    vocab_vectorizer()
+  
+  # Compute TF-IDF and cosine similarity
+  tfidf_matrix <- data$summary %>%
+    itoken() %>%
+    create_dtm(vectorizer) %>%
+    transform_tfidf()
+  
+  similarity_matrix <- tfidf_matrix %>%
+    sim2(method = "cosine")
+  
+  return(similarity_matrix)
+}
 
+# UI Definition
 ui <- bs4DashPage(
-  title = "Project 2025 Index",
-  header = bs4DashNavbar(),
+  navbar = bs4DashNavbar(
+    title = "Project 2025 Index Explorer",
+    status = "primary"
+  ),
   sidebar = bs4DashSidebar(
-    skin = "dark",
-    title = "Menu",
-    collapsed = TRUE,
-    bs4SidebarMenu(
-      bs4SidebarMenuItem(
-        "General Visualizations", tabName = "general", icon = icon("chart-bar")
-      ),
-      bs4SidebarMenuItem(
-        "Result Edition", tabName = "edition", icon = icon("book")
-      ),
-      bs4SidebarMenuItem(
-        "Sentiment Data", tabName = "sentiment", icon = icon("smile")
-      ),
-      bs4SidebarMenuItem(
-        "API Definitions", tabName = "api", icon = icon("info-circle")
-      ),
-      actionButton(inputId = "confirm_button", label = "Confirm Selection"),
-      selectizeInput(
-        inputId = "title_select",
-        label = "Select Titles",
-        choices = NULL,
-        multiple = TRUE,
-        options = list(placeholder = "Type to search titles...")
-      )
+    skin = "light",
+    # Sidebar content
+    sidebarMenu(
+      menuItem("Topic Search", tabName = "search", icon = icon("search")),
+      menuItem("Unique Topics", tabName = "unique", icon = icon("star")),
+      menuItem("Topic Networks", tabName = "network", icon = icon("project-diagram"))
+    ),
+    
+    # Search filters
+    selectizeInput(
+      "selected_topics", 
+      "Select Topics", 
+      choices = NULL,  # Will be populated dynamically
+      multiple = TRUE
+    ),
+    sliderInput(
+      "page_range", 
+      "Page Range", 
+      min = 1, 
+      max = 1000,  # Adjust based on your max page number
+      value = c(1, 1000)
+    ),
+    checkboxGroupInput(
+      "sections", 
+      "Sections",
+      choices = NULL  # Will be populated dynamically
     )
   ),
   body = bs4DashBody(
-    bs4TabItems(
-      # General Visualizations Tab
-      bs4TabItem(
-        tabName = "general",
-        h2("General Visualizations"),
-        plotOutput("heatmap"),
-        plotOutput("bar_chart")
+    tabItems(
+      # Topic Search Tab
+      tabItem(
+        tabName = "search",
+        fluidRow(
+          box(
+            title = "Topic Instances",
+            DTOutput("topic_instances")
+          ),
+          box(
+            title = "Topic Distribution",
+            plotlyOutput("topic_distribution")
+          )
+        )
       ),
-      # Edition Tab
-      bs4TabItem(
-        tabName = "edition",
-        h2("Edition"),
-        uiOutput("accordion")
+      
+      # Unique Topics Tab
+      tabItem(
+        tabName = "unique",
+        fluidRow(
+          box(
+            title = "Rare and Unique Topics",
+            DTOutput("unique_topics")
+          )
+        )
       ),
-      # Sentiment Data Tab
-      bs4TabItem(
-        tabName = "sentiment",
-        h3("Selected Titles"),
-        verbatimTextOutput("selected_titles")
-      ),
-      # API Definitions Tab
-      bs4TabItem(
-        tabName = "api",
-        h2("API Definitions"),
-        textOutput("api_info")
+      
+      # Topic Network Tab
+      tabItem(
+        tabName = "network",
+        fluidRow(
+          box(
+            title = "Topic Relationships",
+            visNetworkOutput("topic_network")
+          )
+        )
       )
     )
   )
 )
 
+# Server Logic
 server <- function(input, output, session) {
-  # Dynamically update the title choices
+  # Load data reactively
+  project_data <- reactive({
+    load_project_data()
+  })
+  
+  # Compute similarity matrix
+  similarity_matrix <- reactive({
+    compute_similarity_matrix(project_data())
+  })
+  
+  # Dynamic input population
   observe({
-    updateSelectizeInput(session, "title_select", choices = unique(indexfm$title), server = TRUE)
-  })
-  
-  # Reactive value for selected titles
-  selected_titles <- reactiveVal(NULL)
-  
-  # Update selected titles when the Confirm button is pressed
-  observeEvent(input$confirm_button, {
-    selected_titles(input$title_select)
-  })
-  
-  # Heatmap Visualization
-  output$heatmap <- renderPlot({
-    titles <- selected_titles()
-    if (is.null(titles) || length(titles) == 0) {
-      plot(1, type = "n", xlab = "", ylab = "", main = "Please select titles and click Confirm")
-      return()
-    }
-    
-    filtered_data <- indexfm %>%
-      filter(title %in% titles) %>%
-      count(title, section)
-    
-    all_combinations <- expand.grid(
-      title = titles,
-      section = unique(indexfm$section)
+    updateSelectizeInput(
+      session, 
+      "selected_topics",
+      choices = unique(project_data()$title),
+      server = TRUE
     )
     
-    complete_data <- all_combinations %>%
-      left_join(filtered_data, by = c("title", "section")) %>%
-      mutate(n = ifelse(is.na(n), 0, n))
+    updateCheckboxGroupInput(
+      session,
+      "sections",
+      choices = unique(project_data()$section)
+    )
+  })
+  
+  # Filtered Data
+  filtered_data <- reactive({
+    req(input$selected_topics)
     
-    ggplot(complete_data, aes(x = section, y = title, fill = n)) +
-      geom_tile(color = "black") +
-      scale_fill_gradient(low = "white", high = "red") +
-      labs(title = "Heatmap of Title Occurrences by Section", x = "Section", y = "Title", fill = "Count") +
-      theme_minimal() +
-      theme(
-        axis.text.x = element_text(angle = 45, hjust = 1),  # Rotate section names for better readability
-        plot.margin = margin(0, 0, 0, 0)  # Remove any extra margin around the plot
+    project_data() %>%
+      filter(
+        title %in% input$selected_topics,
+        between(page, input$page_range[1], input$page_range[2]),
+        section %in% input$sections
       )
   })
   
-  # Stacked Bar Chart Visualization
-  output$bar_chart <- renderPlot({
-    titles <- selected_titles()
-    if (is.null(titles) || length(titles) == 0) {
-      plot(1, type = "n", xlab = "", ylab = "", main = "Please select titles and click Confirm")
-      return()
-    }
-    
-    filtered_data <- indexfm %>%
-      filter(title %in% titles) %>%
-      count(title, reference_type)
-    
-    ggplot(filtered_data, aes(x = reorder(title, -n), y = n, fill = reference_type)) +
-      geom_bar(stat = "identity", position = "stack") +
-      labs(
-        title = "Stacked Bar Chart of Title Frequency by Reference Type",
-        x = "Title", y = "Frequency", fill = "Reference Type"
-      ) +
-      coord_flip() +
-      theme_minimal()
+  # Topic Instances Table
+  output$topic_instances <- renderDT({
+    filtered_data() %>%
+      select(title, section, page, summary) %>%
+      datatable(
+        options = list(pageLength = 10),
+        rownames = FALSE
+      )
   })
   
-  output$accordion <- renderUI({
-    titles <- selected_titles()
-    
-    if (is.null(titles) || length(titles) == 0) {
-      return(h4("Please select topics and click Confirm to view their references."))
-    }
-    
-    filtered_data <- indexfm %>%
-      filter(title %in% titles) %>%
-      arrange(page)
-    
-    sections <- filtered_data %>%
-      group_by(section) %>%
-      summarise(n_references = n(), .groups = "drop")
-    
-    if (nrow(sections) == 0) {
-      return(h4("No sections found for the selected topics."))
-    }
-    
-    # Generate accordion
-    bs4Dash::accordion(
-      id = "edition_accordion",
-      lapply(1:nrow(sections), function(i) {
-        section_name <- sections$section[i]
-        section_id <- paste0("section_", i)  # Unique ID for collapsible section
-        print(section_id)
-        
-        references <- filtered_data %>%
-          filter(section == section_name) %>%
-          arrange(page)
-        
-        references_html <- references %>%
-          mutate(
-            ref_html = sprintf(
-              "<b>Title:</b> %s<br><b>Page:</b> %d<br><b>Summary:</b> %s<br>",
-              title, page, summary
-            )
-          ) %>%
-          pull(ref_html) %>%
-          paste(collapse = "<hr>")
-        
-        # Create accordion item
-        bs4Dash::accordionItem(
-          id = section_id,
-          title = paste(section_name, "(", nrow(references), "references)"),
-          status = "primary",
-          shiny::HTML(references_html),
-          expanded = FALSE  # Ensure it starts collapsed
-        )
-      })
-    )
+  # Unique Topics Table
+  output$unique_topics <- renderDT({
+    project_data() %>%
+      filter(is_unique) %>%
+      select(title, section, page, summary) %>%
+      datatable(
+        options = list(pageLength = 10),
+        rownames = FALSE
+      )
   })
   
-  
-  
-  # API Definitions Placeholder
-  output$api_info <- renderText({
-    "This section will provide definitions and details for the API."
+  # Topic Distribution (placeholder)
+  output$topic_distribution <- renderPlotly({
+    # Implement topic distribution visualization
   })
   
+  # Topic Network (placeholder)
+  output$topic_network <- renderVisNetwork({
+    # Implement topic network visualization
+  })
 }
 
+# Run the application 
 shinyApp(ui, server)
