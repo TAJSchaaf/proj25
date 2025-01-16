@@ -19,9 +19,9 @@ ui <- bs4DashPage(
   title = "Project 2025 Index",
   header = bs4DashNavbar(),
   sidebar = bs4DashSidebar(
-    skin = "dark",
+    skin = "light",
     title = "Menu",
-    collapsed = TRUE,
+    collapsed = FALSE,
     bs4SidebarMenu(
       bs4SidebarMenuItem(
         "About", tabName = "about", icon = icon("info-circle")
@@ -35,6 +35,7 @@ ui <- bs4DashPage(
       bs4SidebarMenuItem(
         "API Definitions", tabName = "api", icon = icon("info-circle")
       ),
+      
       actionButton(inputId = "confirm_button", label = "Confirm Selection"),
       selectizeInput(
         inputId = "title_select",
@@ -55,7 +56,8 @@ ui <- bs4DashPage(
       bs4TabItem(
         tabName = "about",
         h2("API Definitions"),
-        textOutput("api_info")
+        textOutput("api_info"),
+        tableOutput("title_stats_table")
       ),
       # General Visualizations Tab
       bs4TabItem(
@@ -68,6 +70,23 @@ ui <- bs4DashPage(
       bs4TabItem(
         tabName = "edition",
         h2("Edition"),
+        # Add this new filtering section
+        fluidRow(
+          column(
+            width = 12,
+            box(
+              width = NULL,
+              title = "Filter by Reference Type",
+              checkboxGroupInput(
+                inputId = "reference_type_filter",
+                label = NULL,
+                choices = c("Statement", "Critique", "Recommendation", "Other"),
+                selected = c("Statement", "Critique", "Recommendation", "Other"),
+                inline = TRUE
+              )
+            )
+          )
+        ),
         uiOutput("accordion")
       ),
       # API Definitions Tab
@@ -94,6 +113,59 @@ server <- function(input, output, session) {
     selected_titles(input$title_select)
   })
   
+  # Generate statistics for the About page table
+  output$title_stats_table <- renderTable({
+    titles <- selected_titles()
+    
+    # If no titles are selected, return an empty table
+    if (is.null(titles) || length(titles) == 0) {
+      return(data.frame("Message" = "Please select titles and click Confirm"))
+    }
+    
+    # Filter data for the selected titles
+    filtered_data <- indexfm %>%
+      filter(title %in% titles)
+    
+    # Create a summary table for each title
+    stats_table <- filtered_data %>%
+      group_by(title) %>%
+      summarise(
+        total_references = n(),
+        total_sections = n_distinct(section),
+        sections_percentage = round((n_distinct(section)/36) * 100, 2),
+        
+        # Calculate the total counts and percentages for each reference type
+        total_statements = sum(reference_type == "Statement"),
+        statement_percentage = round((total_statements / total_references) * 100, 2),
+        
+        total_critique = sum(reference_type == "Critique"),
+        critique_percentage = round((total_critique / total_references) * 100, 2),
+        
+        total_recommendation = sum(reference_type == "Recommendation"),
+        recommendation_percentage = round((total_recommendation / total_references) * 100, 2),
+        
+        total_other = sum(reference_type == "Other"),
+        other_percentage = round((total_other / total_references) * 100, 2)
+      ) %>%
+      arrange(desc(total_references))  # Optional: Sort by total references
+    
+    # Format the percentages and total values together for each reference type
+    stats_table <- stats_table %>%
+      mutate(
+        sections = paste(total_sections, " (", sections_percentage, "%)", sep = ""),
+        statement = paste(total_statements, "(", statement_percentage, "%)", sep = ""),
+        critique = paste(total_critique, "(", critique_percentage, "%)", sep = ""),
+        recommendation = paste(total_recommendation, "(", recommendation_percentage, "%)", sep = ""),
+        other = paste(total_other, "(", other_percentage, "%)", sep = "")
+      ) %>%
+      select(-total_sections, -sections_percentage, -total_statements, -statement_percentage, -total_critique, -critique_percentage,
+             -total_recommendation, -recommendation_percentage, -total_other, -other_percentage)  # Remove intermediate columns
+    
+    # Return the formatted table
+    stats_table
+  })
+
+  
   # Heatmap Visualization
   output$heatmap <- renderPlot({
     titles <- selected_titles()
@@ -115,7 +187,7 @@ server <- function(input, output, session) {
       left_join(filtered_data, by = c("title", "section")) %>%
       mutate(n = ifelse(is.na(n), 0, n))
     
-    ggplot(complete_data, aes(x = section, y = title, fill = n)) +
+    ggplot(complete_data, aes(x = section, y = reorder(title, n), fill = n)) +
       geom_tile(color = "black") +
       scale_fill_gradient(low = "white", high = "red") +
       labs(title = "Heatmap of Title Occurrences by Section", x = "Section", y = "Title", fill = "Count") +
@@ -138,7 +210,7 @@ server <- function(input, output, session) {
       filter(title %in% titles) %>%
       count(title, reference_type)
     
-    ggplot(filtered_data, aes(x = reorder(title, -n), y = n, fill = reference_type)) +
+    ggplot(filtered_data, aes(x = reorder(title, n), y = n, fill = reference_type)) +
       geom_bar(stat = "identity", position = "stack") +
       labs(
         title = "Stacked Bar Chart of Title Frequency by Reference Type",
@@ -154,6 +226,7 @@ server <- function(input, output, session) {
       theme_minimal()
   })
   
+  # Edition accordion
   output$accordion <- renderUI({
     titles <- selected_titles()
     
@@ -170,21 +243,21 @@ server <- function(input, output, session) {
       summarise(n_references = n(), .groups = "drop")
     
     if (nrow(sections) == 0) {
-      return(h4("No sections found for the selected topics."))
+      return(h4("No references found for the selected criteria."))
     }
     
     # Define a mapping of reference_type to colors
     reference_colors <- c(
-      "Statement" = "#bc4b51", 
-      "Critique" = "#708d81",   
-      "Recommendation" = "#f4d58d",  
-      "Other" = "#e0e1dd"       
+      "Statement" = "#bc4b51",
+      "Critique" = "#e0e1dd",
+      "Recommendation" = "#f4d58d",
+      "Other" = "#708d81"
     )
     
     # Create accordion wrapper
     do.call(tags$div, c(
       list(
-        class = "accordion", 
+        class = "accordion",
         id = "edition_accordion"
       ),
       lapply(seq_len(nrow(sections)), function(i) {
@@ -197,9 +270,8 @@ server <- function(input, output, session) {
         
         references_html <- lapply(1:nrow(references), function(j) {
           ref <- references[j, ]
-          ref_color <- reference_colors[ref$reference_type]  # Get the color for the reference type
+          ref_color <- reference_colors[ref$reference_type]
           
-          # Add a colored background for each reference
           sprintf(
             "<div style='background-color: %s; padding: 10px; margin-bottom: 5px; border-radius: 5px;'>
              <b>Title:</b> %s<br>
@@ -210,10 +282,8 @@ server <- function(input, output, session) {
           )
         }) %>%
           unlist() %>%
-          paste(collapse = "")  # Combine all references into one string
+          paste(collapse = "")
         
-        
-        # Create card structure manually
         tags$div(
           class = "card",
           tags$div(
@@ -246,7 +316,6 @@ server <- function(input, output, session) {
     ))
   })
   
-  
   # API Definitions Placeholder
   output$api_info <- renderText({
     "This section will provide definitions and details for the API."
@@ -254,7 +323,7 @@ server <- function(input, output, session) {
   
   # About Placeholder
   output$about_info <- renderText({
-    "This section will provide definitions and details for the API."
+    "This section will provide definitions and details for the Section."
   })
 }
 
