@@ -138,23 +138,23 @@ server <- function(input, output, session) {
         total_other = sum(reference_type == "Other"),
         other_percentage = round((total_other / total_references) * 100, 2)
       ) %>%
-      arrange(desc(total_references))  # Optional: Sort by total references
+      arrange(desc(total_references))
     
     # Format the percentages and total values together for each reference type
     stats_table <- stats_table %>%
       mutate(
-        sections = paste(total_sections, " (", sections_percentage, "%)", sep = ""),
-        statement = paste(total_statements, "(", statement_percentage, "%)", sep = ""),
-        critique = paste(total_critique, "(", critique_percentage, "%)", sep = ""),
-        recommendation = paste(total_recommendation, "(", recommendation_percentage, "%)", sep = ""),
-        other = paste(total_other, "(", other_percentage, "%)", sep = "")
+        sections = paste(total_sections, "/36", " (", sections_percentage, "%)", sep = ""),
+        statement = paste(total_statements, " (", statement_percentage, "%)", sep = ""),
+        critique = paste(total_critique, " (", critique_percentage, "%)", sep = ""),
+        recommendation = paste(total_recommendation, " (", recommendation_percentage, "%)", sep = ""),
+        other = paste(total_other, " (", other_percentage, "%)", sep = "")
       ) %>%
       select(-total_sections, -sections_percentage, -total_statements, -statement_percentage, -total_critique, -critique_percentage,
              -total_recommendation, -recommendation_percentage, -total_other, -other_percentage)  # Remove intermediate columns
     
     # Return the formatted table
     stats_table
-  })
+  }, bordered = TRUE, colnames = TRUE, hover = TRUE, striped = TRUE)
 
   
   # Heatmap Visualization
@@ -227,6 +227,7 @@ server <- function(input, output, session) {
     # Filter and sort the data
     filtered_data <- indexfm %>%
       filter(title %in% titles) %>%
+      filter(reference_type %in% input$reference_type_filter) %>%
       arrange(page)
     
     # Group by section_index and retain section name for display
@@ -244,7 +245,7 @@ server <- function(input, output, session) {
       "Statement" = "#bc4b51",
       "Critique" = "#e0e1dd",
       "Recommendation" = "#f4d58d",
-      "Other" = "#708d81"
+      "Other" = "#c68a8a"
     )
     
     # Create accordion wrapper
@@ -259,7 +260,7 @@ server <- function(input, output, session) {
         section_id <- paste0("collapse_edition_accordion_", i)
         
         references <- filtered_data %>%
-          filter(section_index == current_section_index) %>%
+          filter(current_section_index == section_index) %>%
           arrange(page)
         
         references_html <- lapply(1:nrow(references), function(j) {
@@ -289,7 +290,7 @@ server <- function(input, output, session) {
                 class = "btn btn-link btn-block text-left",
                 `data-toggle` = "collapse",
                 `data-target` = paste0("#", section_id),
-                `aria-expanded` = "false",
+                `aria-expanded` = "true",
                 `aria-controls` = section_id,
                 paste(section_name, "(", nrow(references), "references)")
               )
