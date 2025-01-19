@@ -6,7 +6,7 @@ pacman::p_load(
 )
 
 setwd("/Users/Thea/Desktop/proj25") # Replace with your directory
-indexfm <- read.csv("index_items_prepared_comma.csv", header = TRUE)
+indexfm <- read.csv("updated_file.csv", header = TRUE)
 
 # section and reference_type as factors
 indexfm$section <- as.factor(indexfm$section)
@@ -23,9 +23,6 @@ ui <- bs4DashPage(
     title = "Menu",
     collapsed = FALSE,
     bs4SidebarMenu(
-      bs4SidebarMenuItem(
-        "About", tabName = "about", icon = icon("info-circle")
-      ),
       bs4SidebarMenuItem(
         "General Visualizations", tabName = "general", icon = icon("chart-bar")
       ),
@@ -52,17 +49,11 @@ ui <- bs4DashPage(
       tags$script(src = "https://cdn.jsdelivr.net/npm/bootstrap@4.5.3/dist/js/bootstrap.bundle.min.js")
     ),
     bs4TabItems(
-      # About tab
-      bs4TabItem(
-        tabName = "about",
-        h2("API Definitions"),
-        textOutput("api_info"),
-        tableOutput("title_stats_table")
-      ),
       # General Visualizations Tab
       bs4TabItem(
         tabName = "general",
         h2("General Visualizations"),
+        tableOutput("title_stats_table"),
         plotOutput("heatmap"),
         plotOutput("bar_chart")
       ),
@@ -176,18 +167,18 @@ server <- function(input, output, session) {
     
     filtered_data <- indexfm %>%
       filter(title %in% titles) %>%
-      count(title, section)
+      count(title, section_simple)
     
     all_combinations <- expand.grid(
       title = titles,
-      section = unique(indexfm$section)
+      section_simple = unique(indexfm$section_simple)
     )
     
     complete_data <- all_combinations %>%
-      left_join(filtered_data, by = c("title", "section")) %>%
+      left_join(filtered_data, by = c("title", "section_simple")) %>%
       mutate(n = ifelse(is.na(n), 0, n))
     
-    ggplot(complete_data, aes(x = section, y = reorder(title, n), fill = n)) +
+    ggplot(complete_data, aes(x = section_simple, y = reorder(title, n), fill = n)) +
       geom_tile(color = "black") +
       scale_fill_gradient(low = "white", high = "red") +
       labs(title = "Heatmap of Title Occurrences by Section", x = "Section", y = "Title", fill = "Count") +
@@ -226,7 +217,6 @@ server <- function(input, output, session) {
       theme_minimal()
   })
   
-  # Edition accordion
   output$accordion <- renderUI({
     titles <- selected_titles()
     
@@ -234,13 +224,16 @@ server <- function(input, output, session) {
       return(h4("Please select topics and click Confirm to view their references."))
     }
     
+    # Filter and sort the data
     filtered_data <- indexfm %>%
       filter(title %in% titles) %>%
       arrange(page)
     
+    # Group by section_index and retain section name for display
     sections <- filtered_data %>%
-      group_by(section) %>%
-      summarise(n_references = n(), .groups = "drop")
+      group_by(section_index, section) %>%
+      summarise(n_references = n(), .groups = "drop") %>%
+      arrange(section_index)  # Sort by section_index
     
     if (nrow(sections) == 0) {
       return(h4("No references found for the selected criteria."))
@@ -261,11 +254,12 @@ server <- function(input, output, session) {
         id = "edition_accordion"
       ),
       lapply(seq_len(nrow(sections)), function(i) {
-        section_name <- as.character(sections$section[i])
+        section_name <- as.character(sections$section[i])  # Use section for display
+        current_section_index <- as.character(sections$section_index[i])  # Use section_index for filtering
         section_id <- paste0("collapse_edition_accordion_", i)
         
         references <- filtered_data %>%
-          filter(section == section_name) %>%
+          filter(section_index == current_section_index) %>%
           arrange(page)
         
         references_html <- lapply(1:nrow(references), function(j) {
@@ -315,6 +309,7 @@ server <- function(input, output, session) {
       })
     ))
   })
+  
   
   # API Definitions Placeholder
   output$api_info <- renderText({
