@@ -2,7 +2,7 @@ if (!require("pacman")) install.packages("pacman")
 
 pacman::p_load(
   "tidyverse", "dplyr", "shiny", "bs4Dash", "patchwork", 
-  "ggplot2", "scales", "collapsibleTree"
+  "ggplot2", "scales"
 )
 
 setwd("/Users/Thea/Desktop/proj25") # Replace with your directory
@@ -35,9 +35,7 @@ ui <- bs4DashPage(
       bs4SidebarMenuItem(
         "API Definitions", tabName = "api", icon = icon("info-circle")
       ),
-       bs4SidebarMenuItem(
-        "Tree", tabName = "tree", icon = icon("tree")
-        ),
+
       actionButton(inputId = "confirm_button", label = "Confirm Selection"),
       selectizeInput(
         inputId = "title_select",
@@ -90,26 +88,7 @@ ui <- bs4DashPage(
         ),
         uiOutput("accordion")
       ),
-      #cloud Tab
-      bs4TabItem(
-        tabName = "tree",
-        fluidRow(
-          box(
-            title = "Chapter Selection", status = "primary", solidHeader = TRUE, width = 4,
-            selectInput(
-              "chapter_select", 
-              "Select Chapters:", 
-              choices = unique(indexfm$section), 
-              multiple = TRUE
-            )
-          ),
-          box(
-            title = "Title Frequency Tree", status = "primary", solidHeader = TRUE, width = 8,
-            collapsibleTreeOutput("title_tree", height = "500px")
-          )
-        )
-        
-      ),
+
       # API Definitions Tab
       bs4TabItem(
         tabName = "api",
@@ -295,35 +274,7 @@ server <- function(input, output, session) {
     ))
   })
   
-  output$title_tree <- renderCollapsibleTree({
-    # Get selected chapters
-    selected_chapters <- input$chapter_select
-    
-    if (is.null(selected_chapters) || length(selected_chapters) == 0) {
-      return(NULL)
-    }
-    
-    
-    # Filter data for selected chapters
-    filtered_data <- indexfm %>%
-      filter(section %in% selected_chapters) %>%
-      count(section, title, sort = TRUE)  # Count occurrences of each title in each section
-    
-    # Prepare data for collapsibleTree
-    tree_data <- filtered_data %>%
-      rename(Chapter = section, Title = title, Frequency = n)
-    
-    print(tree_data)
-    
-    collapsibleTreeSummary(
-      tree_data,
-      hierarchy = c("Chapter", "Title"),
-      root = "Chapters",
-      attribute = "Frequency",
-      fill = "Frequency",  # Color nodes by frequency
-      tooltip = TRUE
-    )
-  })
+
   
   
   
@@ -332,10 +283,6 @@ server <- function(input, output, session) {
     "This section will provide definitions and details for the API."
   })
   
-  # About Placeholder
-  output$about_info <- renderText({
-    "This section will provide definitions and details for the Section."
-  })
 }
 
 shinyApp(ui, server)
